@@ -22,6 +22,7 @@ limitations under the License.
 /* !! !! !! !! !! !! !! !! !! !!
   Polyfill for performance.now
 !! !! !! !! !! !! !! !! !! !! */
+
 window.performance = window.performance || {};
 performance.now = (function() {
   return performance.now       ||
@@ -142,22 +143,7 @@ Neb.Vector2D.prototype.draw = function(ctx, pointStyle, lineStyle, origin) {
     origin = new Neb.Vector2D(0.0, 0.0);
   if (!(ctx instanceof CanvasRenderingContext2D))
     return;
-/*
-  if (originStyle !== undefined) {
-    ctx.beginPath();
-    ctx.moveTo(origin.x, origin.y);
-    ctx.strokeStyle = originStyle;
-    ctx.fillStyle = originStyle;
-    ctx.arc(origin.x, origin.y, 2, 0, 2 * Math.PI);
-    ctx.fill();
-    ctx.stroke();
-    ctx.closePath();
-  }
-*/
-/*
-  console.log("origin.x: " + origin.x);
-  console.log("this.x: " + this.x);
-*/
+
   if (lineStyle !== null) {
     ctx.beginPath();
     ctx.moveTo(origin.x, origin.y);
@@ -297,16 +283,16 @@ Neb.Node.prototype.update = function(curTime) {
 }
 
 Neb.Node.prototype.showDebug = function(ctx, pointStyle, lineStyle,
-  recursion, _origdraw) {
-  if (recursion-- < 0)
-    return;
-
+                                        recursion, _origdraw) {
   var curPos = this.getPosition();
 
   if (_origdraw === undefined) {
     curPos.draw(ctx, pointStyle[0], null);
     _origdraw = true;
   }
+
+  if (recursion-- <= 0)
+    return;
 
   if (pointStyle.length > 1)
     pointStyle = pointStyle.slice(1);
@@ -317,5 +303,107 @@ Neb.Node.prototype.showDebug = function(ctx, pointStyle, lineStyle,
     this.children[child].getPosition().draw(ctx, pointStyle[0], lineStyle[0], curPos);
     this.children[child].showDebug(ctx, pointStyle, lineStyle,
       recursion, _origdraw);
+  }
+}
+
+/****************************
+  Polygon
+****************************/
+
+Neb.Polygon = function(vertices) {
+  this.vertices = vertices;
+}
+
+Neb.Polygon.prototype.getVertices = function(origin) {
+  var retVertices = [];
+
+  if (origin === undefined)
+    origin = new Neb.Vector2D(0,0);
+
+  for (vtx in this.vertices) {
+    retVertices.push(this.vertices[vtx].add(origin));
+  }
+
+  return retVertices;
+}
+
+Neb.Polygon.prototype.draw = function(ctx, origin, lineStyle, fillStyle) {
+  var translVertices = this.getVertices(origin);
+
+  ctx.beginPath();
+  if (lineStyle === undefined)
+    lineStyle = "#000000";
+  ctx.strokeStyle = lineStyle;
+
+  ctx.moveTo(translVertices[0].x, translVertices[0].y);
+
+  for (var vtx in this.vertices)
+    ctx.lineTo(translVertices[vtx].x, translVertices[vtx].y);
+
+  if (fillStyle !== undefined) {
+    ctx.fillStyle = fillStyle;
+    ctx.fill();
+  }
+
+  ctx.closePath();
+  ctx.stroke();
+}
+
+/**************************************
+  Rectangle
+**************************************/
+
+Neb.Rectangle = function(v1, v2) {
+  this.v1 = v1;
+  this.v2 = v2;
+}
+
+Neb.Rectangle.prototype.getVertices = function(origin) {
+  if (origin === undefined)
+    origin = new Neb.Vector2D(0,0);
+
+  return [this.v1.add(origin), this.v2.add(origin)];
+}
+
+Neb.Rectangle.prototype.draw = function(ctx, origin, lineStyle, fillStyle) {
+  var translVertices = this.getVertices(origin);
+
+  ctx.beginPath();
+  if (lineStyle === undefined)
+    lineStyle = "#000000";
+  ctx.strokeStyle = lineStyle;
+
+  ctx.moveTo(translVertices[0].x, translVertices[0].y);
+  ctx.lineTo(translVertices[0].x, translVertices[1].y);
+  ctx.lineTo(translVertices[1].x, translVertices[1].y);
+  ctx.lineTo(translVertices[1].x, translVertices[0].y);
+
+  if (fillStyle !== undefined) {
+    ctx.fillStyle = fillStyle;
+    ctx.fill();
+  }
+
+  ctx.closePath();
+  ctx.stroke();
+}
+
+Neb.Rectangle.prototype.checkCollision = function(origin, rect2, origin2) {
+  if (rect2 === undefined || !(rect2 instanceof Neb.Rectangle))
+    throw "Neb.Rectangle.checkCollision not passed a valid Rectangle" +
+      " to check against.";
+
+  var verts1 = this.getVertices();
+  var verts2 = rect2.getVertices();
+
+  if ( ( (verts1[0].x >= verts2[0].x && verts1[0].x <= verts2[1].x) ||
+         (verts2[0].x >= verts1[0].x && verts2[0].x <= verts1[1].x)
+       ) &&
+       ( (verts1[0].y >= verts2[0].y && verts1[0].y <= verts2[1].y) ||
+         (verts2[0].y >= verts1[0].y && verts2[0].y <= verts1[1].y)
+       ) ) {
+    return true;
+  }
+  else {
+    return false;
   }
 }
