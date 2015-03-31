@@ -113,7 +113,7 @@ Neb.Vector2D.prototype.norm = function() {
 }
 
 Neb.Vector2D.prototype.add = function(other) {
-  return new Vector2D(this.x + other.x, this.y + other.y);
+  return new Neb.Vector2D(this.x + other.x, this.y + other.y);
 }
 
 Neb.Vector2D.prototype.addWith = function(other) {
@@ -137,25 +137,45 @@ Neb.Vector2D.prototype.angleTo = function(other) {
   return ((this.x * other.y - this.y * other.x) < 0 ? -1 : 1) * ang;
 }
 
-Neb.Vector2D.prototype.draw = function(ctx, origin) {
-  if (origin == undefined) origin = new Neb.Vector2D(0.0, 0.0);
+Neb.Vector2D.prototype.draw = function(ctx, pointStyle, lineStyle, origin) {
+  if (origin === undefined)
+    origin = new Neb.Vector2D(0.0, 0.0);
   if (!(ctx instanceof CanvasRenderingContext2D))
     return;
+/*
+  if (originStyle !== undefined) {
+    ctx.beginPath();
+    ctx.moveTo(origin.x, origin.y);
+    ctx.strokeStyle = originStyle;
+    ctx.fillStyle = originStyle;
+    ctx.arc(origin.x, origin.y, 2, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.stroke();
+    ctx.closePath();
+  }
+*/
+/*
+  console.log("origin.x: " + origin.x);
+  console.log("this.x: " + this.x);
+*/
+  if (lineStyle !== null) {
+    ctx.beginPath();
+    ctx.moveTo(origin.x, origin.y);
+    ctx.strokeStyle = lineStyle;
+    ctx.lineTo(this.x, this.y);
+    ctx.stroke();
+    ctx.closePath();
+  }
 
-  ctx.beginPath();
-  ctx.moveTo(origin.x, origin.y);
-  ctx.strokeStyle = "#AAAAAA";
-  ctx.lineTo(this.x, this.y);
-  ctx.stroke();
-  ctx.closePath();
-
-  ctx.beginPath();
-  ctx.strokeStyle = "#0000FF";
-  ctx.fillStyle = "#0000FF";
-  ctx.arc(this.x, this.y, 2, 0, 2 * Math.PI);
-  ctx.fill();
-  ctx.stroke();
-  ctx.closePath();
+  if (pointStyle !== null) {
+    ctx.beginPath();
+    ctx.strokeStyle = pointStyle;
+    ctx.fillStyle = pointStyle;
+    ctx.arc(this.x, this.y, 2, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.stroke();
+    ctx.closePath();
+  }
 }
 
 console.log("NebJS library loaded.")
@@ -164,15 +184,19 @@ console.log("NebJS library loaded.")
   Force
 **************************************/
 
-Neb.Force = function(vec, duration, curTime) {
+Neb.Force = function(vec, curTime, duration, volatile) {
   this.vector = vec;
   if (duration === undefined)
     this.expireTime = -1;
   else
     this.expireTime = new Date().getMilliseconds + duration;
+  if (volatile === undefined)
+    this.volatile = false;
+  else
+    this.volatile = true;
+
   if (curTime === undefined)
     curTime = new Date().getMilliseconds();
-
   this.startTime = curTime;
 }
 
@@ -192,6 +216,9 @@ Neb.Force.prototype.computeDelta = function(skewTime, time1, time2, mass) {
   time1 -= skewTime;
   time2 -= skewTime;
 
+  if (this.volatile)
+    this.expireTime = 0;
+
   return this.vector.scalarMul( ((time2*time2) / 1000.0) / mass -
     ((time1*time1) / 1000.0) / mass );
 }
@@ -199,7 +226,7 @@ Neb.Force.prototype.computeDelta = function(skewTime, time1, time2, mass) {
 /**************************************
   Node
 
-  TODO: Add children nodes
+  TODO: Complete child nodes
 **************************************/
 
 Neb.Node = function(pos, mass, velocity, time) {
@@ -225,6 +252,21 @@ Neb.Node = function(pos, mass, velocity, time) {
     this.velocity = velocity;
 
   this.forces = [];
+  this.children = [];
+  this._parent = null;
+}
+
+Neb.Node.prototype.getPosition = function() {
+  if (this._parent === null)
+    return this.pos;
+  return this.pos.add(this._parent.getPosition());
+}
+
+Neb.Node.prototype.addChild = function(node) {
+  node._parent = this;
+  this.children.push(node);
+
+  return node;
 }
 
 Neb.Node.prototype.addForce = function(force, curTime) {
@@ -246,4 +288,34 @@ Neb.Node.prototype.update = function(curTime) {
   this.pos.addWith(this.velocity.scalarMul((curTime - this.lastUpdate) / 1000));
 
   this.lastUpdate = curTime;
+
+  if (this.children.length > 0) {
+    for (var child in this.children) {
+      this.children[child].update(curTime);
+    }
+  }
+}
+
+Neb.Node.prototype.showDebug = function(ctx, pointStyle, lineStyle,
+  recursion, _origdraw) {
+  if (recursion-- < 0)
+    return;
+
+  var curPos = this.getPosition();
+
+  if (_origdraw === undefined) {
+    curPos.draw(ctx, pointStyle[0], null);
+    _origdraw = true;
+  }
+
+  if (pointStyle.length > 1)
+    pointStyle = pointStyle.slice(1);
+  if (lineStyle.length > 1)
+    lineStyle = lineStyle.slice(1);
+
+  for (var child in this.children) {
+    this.children[child].getPosition().draw(ctx, pointStyle[0], lineStyle[0], curPos);
+    this.children[child].showDebug(ctx, pointStyle, lineStyle,
+      recursion, _origdraw);
+  }
 }
